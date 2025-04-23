@@ -2,13 +2,10 @@
 import { parse } from '@babel/parser';
 import traverse from '@babel/traverse';
 import generate from '@babel/generator';
-import * as t from '@babel/types';
+import * as t from '@babel/types'; // Importáljuk a t-t
 import { ErrorCollector } from '../errors/ErrorCollector';
-import { 
-  safeASTCast, 
-  handleBabelVersionConflict, 
-  safeExpressionHandler 
-} from '../astTransformerFix';
+import { transformNextImageToUnpicProps } from '../astTransformerHelper';
+import { BabelTypeAdapter } from '../ast/BabelTypeAdapter';
 
 /**
  * Transformer that uses AST to convert Next.js Image components
@@ -53,20 +50,14 @@ export class AstImageTransformer {
           
           if (importSource === 'next/image') {
             nextImageImportFound = true;
-            
-            // Replace the import with @unpic/react
             path.node.source.value = '@unpic/react';
             
-            // Check if it's a default import and adjust if needed
-            const specifiers = path.node.specifiers;
-            if (specifiers && specifiers.length > 0) {
-              const defaultImport = specifiers.find(
-                spec => t.isImportDefaultSpecifier(handleBabelVersionConflict(spec))
-              );
-              
-              if (defaultImport) {
-                imageComponentFound = true;
-              }
+            const defaultImport = path.node.specifiers.find(
+              spec => BabelTypeAdapter.isValidImportSpecifier(spec)
+            );
+            
+            if (defaultImport) {
+              imageComponentFound = true;
             }
           }
         }
@@ -79,20 +70,17 @@ export class AstImageTransformer {
       
       // Transform JSX elements
       traverse(ast, {
-        JSXElement: {
-          enter: (path) => {
-            const openingElement = path.node.openingElement;
+        JSXElement(path) {
+          const openingElement = path.node.openingElement;
+          
+          // Check if this is an Image component
+          if (t.isJSXIdentifier(openingElement.name) && 
+              openingElement.name.name === 'Image') {
             
-            // Check if this is an Image component
-            if (t.isJSXIdentifier(openingElement.name) && 
-                openingElement.name.name === 'Image') {
-              
-              imageComponentFound = true;
-              
-              // Convert Next.js Image props to @unpic/react Image props
-              const attributes = handleBabelVersionConflict(openingElement.attributes);
-              this.transformImageProps(attributes);
-            }
+            imageComponentFound = true;
+            
+            // Convert Next.js Image props to @unpic/react Image props
+            transformNextImageToUnpicProps(openingElement.attributes);
           }
         }
       });
@@ -127,102 +115,6 @@ export class AstImageTransformer {
       
       // Return original code if transformation fails
       return result;
-    }
-  }
-  
-  /**
-   * Transform Next.js Image props to @unpic/react Image props
-   */
-  private transformImageProps(attributes: any[]): void {
-    if (!Array.isArray(attributes)) return;
-    
-    // Track if required props are present
-    let hasSizes = false;
-    let hasWidth = false;
-    let hasHeight = false;
-    
-    // Process all attributes safely
-    for (let i = 0; i < attributes.length; i++) {
-      const attr = attributes[i];
-      
-      if (!t.isJSXAttribute(attr)) continue;
-      
-      const name = attr.name.name.toString();
-      
-      switch (name) {
-        case 'layout':
-          // Remove layout prop as it's not needed in @unpic/react
-          attributes.splice(i, 1);
-          i--;
-          break;
-        
-        case 'objectFit':
-          // Rename to style prop with objectFit
-          attr.name.name = 'style';
-          const value = attr.value;
-          
-          if (t.isStringLiteral(value)) {
-            // Create object expression for style
-            attr.value = t.jsxExpressionContainer(
-              t.objectExpression([
-                t.objectProperty(
-                  t.identifier('objectFit'),
-                  t.stringLiteral(value.value)
-                )
-              ])
-            );
-          }
-          break;
-        
-        case 'priority':
-          // Convert priority to loading="eager"
-          attr.name.name = 'loading';
-          attr.value = t.stringLiteral('eager');
-          break;
-        
-        case 'placeholder':
-          // Handle placeholder - we'll keep it for now but add a warning
-          if (attr.value && t.isStringLiteral(attr.value) && attr.value.value === 'blur') {
-            // Keep as is, warning added elsewhere
-          }
-          break;
-          
-        case 'sizes':
-          hasSizes = true;
-          break;
-          
-        case 'width':
-          hasWidth = true;
-          break;
-          
-        case 'height':
-          hasHeight = true;
-          break;
-      }
-    }
-    
-    // Add loading="lazy" if no priority/loading is specified
-    const hasLoading = attributes.some(attr => 
-      t.isJSXAttribute(attr) && attr.name.name.toString() === 'loading'
-    );
-    
-    if (!hasLoading) {
-      attributes.push(
-        safeASTCast<any>(t.jsxAttribute(
-          t.jsxIdentifier('loading'),
-          t.stringLiteral('lazy')
-        ))
-      );
-    }
-    
-    // Add sizes attribute for responsive images if needed
-    if (!hasSizes && hasWidth && hasHeight) {
-      attributes.push(
-        safeASTCast<any>(t.jsxAttribute(
-          t.jsxIdentifier('sizes'),
-          t.stringLiteral('(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw')
-        ))
-      );
     }
   }
 }
