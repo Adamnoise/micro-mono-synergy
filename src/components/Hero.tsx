@@ -1,3 +1,4 @@
+
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
@@ -13,48 +14,58 @@ const Hero = ({ onStartAnalysis, isAnalyzing }: HeroProps) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const updateFiles = (files: File[], source: "dropped" | "selected") => {
-    setSelectedFiles(files);
-
-    toast({
-      title: `Files ${source === "dropped" ? "Received" : "Selected"}`,
-      description: `${files.length} files ${source} for analysis.`,
-    });
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
   };
 
-  const handleDrag = (e: React.DragEvent, isEntering: boolean) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(isEntering);
+    setIsDragging(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files?.length) {
-      updateFiles(Array.from(e.dataTransfer.files), "dropped");
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      setSelectedFiles(files);
+      
+      toast({
+        title: "Files Received",
+        description: `${files.length} files dropped and ready for analysis.`,
+      });
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      updateFiles(Array.from(e.target.files), "selected");
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      setSelectedFiles(files);
+      
+      toast({
+        title: "Files Selected",
+        description: `${files.length} files selected for analysis.`,
+      });
     }
   };
 
   const handleStartAnalysis = () => {
-    if (!selectedFiles.length) {
-      return toast({
+    if (selectedFiles.length > 0) {
+      console.log("Starting analysis with", selectedFiles.length, "files");
+      onStartAnalysis(selectedFiles);
+      toast({
+        title: "Analysis Started",
+        description: `Analyzing ${selectedFiles.length} files...`
+      });
+    } else {
+      toast({
         title: "No Files Selected",
         description: "Please select files to analyze first.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
-
-    onStartAnalysis(selectedFiles);
-    toast({
-      title: "Analysis Started",
-      description: `Analyzing ${selectedFiles.length} files...`,
-    });
   };
 
   return (
@@ -62,28 +73,37 @@ const Hero = ({ onStartAnalysis, isAnalyzing }: HeroProps) => {
       <h1 className="text-4xl md:text-6xl font-bold text-center bg-gradient-to-r from-purple-600 via-blue-500 to-indigo-600 bg-clip-text text-transparent">
         Next.js to Vite Converter
       </h1>
+      
       <p className="mt-6 text-xl text-gray-600 text-center max-w-2xl">
-        Transform your Next.js project to Vite for faster development,
+        Transform your Next.js project to Vite for faster development, 
         flexible build processes, and enhanced performance.
       </p>
-
-      <div
+      
+      <div 
         className={`mt-12 w-full max-w-3xl p-8 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all
-        ${isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-white"}`}
-        onDragOver={(e) => handleDrag(e, true)}
-        onDragLeave={(e) => handleDrag(e, false)}
+          ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white'}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         <div className="text-center">
-          <UploadIcon />
-
+          <div className="h-16 w-16 mx-auto mb-4 bg-gradient-to-br from-blue-400 to-purple-600 rounded-xl flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+          </div>
+          
           <h3 className="text-xl font-semibold">Upload Your Next.js Project</h3>
           <p className="mt-2 text-gray-500">
             Drag and drop your project files or select them from your computer
           </p>
-
+          
           <div className="mt-6 flex flex-col sm:flex-row gap-4 items-center justify-center">
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="px-6">
+            <Button 
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-6"
+            >
               Browse Files
             </Button>
             <input
@@ -92,9 +112,11 @@ const Hero = ({ onStartAnalysis, isAnalyzing }: HeroProps) => {
               onChange={handleFileChange}
               className="hidden"
               multiple
+              // Remove the problematic attributes that don't work correctly in some browsers
+              // and use regular file selection
             />
-
-            <Button
+            
+            <Button 
               onClick={handleStartAnalysis}
               disabled={isAnalyzing || selectedFiles.length === 0}
               className="px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
@@ -104,48 +126,27 @@ const Hero = ({ onStartAnalysis, isAnalyzing }: HeroProps) => {
             </Button>
           </div>
         </div>
-
-        {selectedFiles.length > 0 && <FileSummary files={selectedFiles} />}
+        
+        {selectedFiles.length > 0 && (
+          <div className="mt-6 w-full">
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-sm font-medium text-gray-700">
+                {selectedFiles.length} {selectedFiles.length === 1 ? 'file' : 'files'} selected
+              </p>
+              <div className="mt-1 text-xs text-gray-500 truncate">
+                {selectedFiles.slice(0, 3).map((file, i) => (
+                  <div key={i} className="truncate">{file.name}</div>
+                ))}
+                {selectedFiles.length > 3 && (
+                  <div>+ {selectedFiles.length - 3} more files</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
-
-const UploadIcon = () => (
-  <div className="h-16 w-16 mx-auto mb-4 bg-gradient-to-br from-blue-400 to-purple-600 rounded-xl flex items-center justify-center">
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-8 w-8 text-white"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-      />
-    </svg>
-  </div>
-);
-
-const FileSummary = ({ files }: { files: File[] }) => (
-  <div className="mt-6 w-full">
-    <div className="bg-gray-50 p-3 rounded-lg">
-      <p className="text-sm font-medium text-gray-700">
-        {files.length} {files.length === 1 ? "file" : "files"} selected
-      </p>
-      <div className="mt-1 text-xs text-gray-500 truncate">
-        {files.slice(0, 3).map((file, index) => (
-          <div key={index} className="truncate">
-            {file.name}
-          </div>
-        ))}
-        {files.length > 3 && <div>+ {files.length - 3} more files</div>}
-      </div>
-    </div>
-  </div>
-);
 
 export default Hero;
